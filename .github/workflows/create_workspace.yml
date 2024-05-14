@@ -1,0 +1,65 @@
+name: create-workspace
+
+on:
+  repository_dispatch:
+    types: [create-workspace-command]
+
+jobs:
+  create:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      # - name: Dump the client payload context
+      #   env:
+      #     PAYLOAD_CONTEXT: ${{ toJson(github.event.client_payload) }}
+      #   run: echo "$PAYLOAD_CONTEXT"
+
+      - name: Extract branch name from remote SMB repository reference
+        id: extract-branch-name
+        run: |
+          branch_name=$(echo "${{ github.event.client_payload.pull_request.head.ref }}" | sed 's/[^a-zA-Z0-9]/_/g')
+          echo "branch_name=$branch_name" >> "$GITHUB_ENV"
+
+      - name: Create workspace branch
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const branchName = process.env.branch_name;
+            const { owner, repo } = context.repo;
+            const defaultBranch = await github.rest.repos.get({ owner, repo }).then(response => response.data.default_branch);
+            const defaultBranchSha = await github.rest.git.getRef({ owner, repo, ref: `heads/${defaultBranch}` }).then(response => response.data.object.sha);
+            console.log(`Default branch ${defaultBranch} SHA: ${defaultBranchSha}`);
+            try {
+              await github.rest.git.getRef({ owner, repo, ref: `heads/${branchName}` });
+              console.log(`Branch ${branchName} already exists`);
+            } catch (error) {
+              console.log(`Creating branch ${branchName} from ${defaultBranch}`);
+              await github.rest.git.createRef({ owner, repo, ref: `refs/heads/${branchName}`, sha: defaultBranchSha });
+            }
+
+      - name: Summarize the run output
+        id: run_output_url
+        if: ${{ always() }}
+        run: |
+          echo "conclusion=${{ failure() && 'failure' || 'success' }}" >> $GITHUB_OUTPUT
+          echo "run-url=https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >> $GITHUB_OUTPUT
+          echo "workspace-branch-url=https://github.com/ETHZ-RobotX/smb_workspace/tree/${{ env.branch_name }}" >> $GITHUB_OUTPUT
+
+      - name: Create comment
+        uses: peter-evans/create-or-update-comment@v4
+        if: ${{ always() }}
+        with:
+          token: ${{ secrets.PAT }}
+          repository: ${{ github.event.client_payload.github.payload.repository.full_name }}
+          issue-number: ${{ github.event.client_payload.github.payload.issue.number }}
+          body: |
+            [Command] ${{ github.event.client_payload.slash_command.command }}
+            [Conclusion] [${{ steps.run_output_url.outputs.conclusion }}]
+            [Workflow log] [${{ steps.run_output_url.outputs.run-url }}]
+            ${{ success() && '[Workspace branch] [${{ steps.run_output_url.outputs.workspace-branch-url }}]' || ''}}
