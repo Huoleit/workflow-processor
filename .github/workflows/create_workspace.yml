@@ -43,11 +43,19 @@ jobs:
               await github.rest.git.createRef({ owner, repo, ref: `refs/heads/${branchName}`, sha: defaultBranchSha });
             }
 
+      - name: check outcomes of previous steps - failure
+        if: ${{ failure() }}
+        run: echo "success=false" >> $GITHUB_ENV
+      
+      - name: check outcomes of previous steps - success
+        if: ${{ success() }}
+        run: echo "success=true" >> $GITHUB_ENV
+
       - name: Summarize the run output
         id: run_output_url
         if: ${{ always() }}
         run: |
-          echo "conclusion=${{ failure() && 'failure' || 'success' }}" >> $GITHUB_OUTPUT
+          echo "conclusion=${{ fromJson(env.success) && 'success' || 'failure' }}" >> $GITHUB_ENV
           echo "run-url=https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >> $GITHUB_OUTPUT
           echo "workspace-branch-url=https://github.com/ETHZ-RobotX/smb_workspace/tree/${{ env.branch_name }}" >> $GITHUB_OUTPUT
 
@@ -55,11 +63,12 @@ jobs:
         uses: peter-evans/create-or-update-comment@v4
         if: ${{ always() }}
         with:
-          token: ${{ secrets.PAT }}
+          token: ${{ secrets.ROBOTX_BOT_TOKEN }}
           repository: ${{ github.event.client_payload.github.payload.repository.full_name }}
           issue-number: ${{ github.event.client_payload.github.payload.issue.number }}
           body: |
             [Command] ${{ github.event.client_payload.slash_command.command }}
             [Conclusion] [${{ steps.run_output_url.outputs.conclusion }}]
             [Workflow log] [${{ steps.run_output_url.outputs.run-url }}]
-            ${{ success() && '[Workspace branch] [${{ steps.run_output_url.outputs.workspace-branch-url }}]' || ''}}
+            ${{ fromJson(env.success) && '[Workspace branch] [${{ steps.run_output_url.outputs.workspace-branch-url }}]' || ''}}
+
