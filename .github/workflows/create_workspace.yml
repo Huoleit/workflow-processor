@@ -42,6 +42,8 @@ jobs:
               console.log(`Creating branch ${branchName} from ${defaultBranch}`);
               await github.rest.git.createRef({ owner, repo, ref: `refs/heads/${branchName}`, sha: defaultBranchSha });
             }
+      - name: exit
+        run: exit 1;
 
       - name: check outcomes of previous steps - failure
         if: ${{ failure() }}
