@@ -52,12 +52,16 @@ jobs:
         run: echo "success=true" >> $GITHUB_ENV
 
       - name: Summarize the run output
-        id: run_output_url
+        id: run_output
         if: ${{ always() }}
         run: |
-          echo "conclusion=${{ fromJson(env.success) && 'success' || 'failure' }}" >> $GITHUB_ENV
+          echo "conclusion=${{ fromJson(env.success) && 'success' || 'failure' }}" >> $GITHUB_OUTPUT
           echo "run-url=https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >> $GITHUB_OUTPUT
-          echo "workspace-branch-url=https://github.com/ETHZ-RobotX/smb_workspace/tree/${{ env.branch_name }}" >> $GITHUB_OUTPUT
+          if [ "${{ fromJson(env.success) }}" == "true" ]; then
+              echo "workspace-branch-url=https://github.com/ETHZ-RobotX/smb_workspace/tree/${{ env.branch_name }}" >> $GITHUB_OUTPUT
+          else
+              echo "workspace-branch-url=N/A" >> $GITHUB_OUTPUT
+          fi
 
       - name: Create comment
         uses: peter-evans/create-or-update-comment@v4
@@ -68,7 +72,8 @@ jobs:
           issue-number: ${{ github.event.client_payload.github.payload.issue.number }}
           body: |
             [Command] ${{ github.event.client_payload.slash_command.command }}
-            [Conclusion] [${{ steps.run_output_url.outputs.conclusion }}]
-            [Workflow log] [${{ steps.run_output_url.outputs.run-url }}]
-            ${{ fromJson(env.success) && '[Workspace branch] [${{ steps.run_output_url.outputs.workspace-branch-url }}]' || ''}}
+            [Conclusion] [${{ steps.run_output.outputs.conclusion }}]
+            [Workflow log] [${{ steps.run_output.outputs.run-url }}]
+            [Workspace branch] [${{ steps.run_output.outputs.workspace-branch-url }}]
+
 
